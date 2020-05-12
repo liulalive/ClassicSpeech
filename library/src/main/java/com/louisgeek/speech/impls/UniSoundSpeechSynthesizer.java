@@ -5,6 +5,7 @@ import android.media.AudioManager;
 import android.text.TextUtils;
 import android.util.Log;
 
+import com.louisgeek.speech.SpeechSynthesizerFactory;
 import com.louisgeek.speech.UscConstant;
 import com.louisgeek.speech._LibraryProvider;
 import com.louisgeek.speech.interfaces.ISpeechSynthesizer;
@@ -17,6 +18,7 @@ import com.unisound.client.SpeechSynthesizerListener;
 import java.io.File;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -31,7 +33,7 @@ public class UniSoundSpeechSynthesizer implements ISpeechSynthesizer {
     private String mFrontendModelPath;
     private String mBackendModelPath;
     private int code;
-    private int mSpeed = 50;
+    private int mSpeed = 52;
     private boolean isInited;
     private boolean mIsSpeakEnAsPinyin;
     private static final boolean DEBUG = false;
@@ -93,6 +95,7 @@ public class UniSoundSpeechSynthesizer implements ISpeechSynthesizer {
         mSpeechPlayer.setOption(SpeechConstants.TTS_KEY_FRONTEND_MODEL_PATH, mFrontendModelPath);// 设置前端模型
         mSpeechPlayer.setOption(SpeechConstants.TTS_KEY_BACKEND_MODEL_PATH, mBackendModelPath);// 设置后端模型
         //
+        Log.d(TAG, "initTts: 设置语速 mSpeed=" + mSpeed);
         mSpeechPlayer.setOption(SpeechConstants.TTS_KEY_VOICE_SPEED, mSpeed);//语速 范围 0 ~ 100
         mSpeechPlayer.setOption(SpeechConstants.TTS_KEY_VOICE_PITCH, 50);//音高 范围 0 ~ 100  大而尖锐 普通女生推荐 40  林志玲推荐
         mSpeechPlayer.setOption(SpeechConstants.TTS_KEY_VOICE_VOLUME, 90);//音量 范围 0 ~ 100
@@ -231,12 +234,17 @@ public class UniSoundSpeechSynthesizer implements ISpeechSynthesizer {
     }
 
     private String mStatus;
+    Future future;
 
     private void initTask() {
         mScheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
-        mScheduledExecutorService.scheduleAtFixedRate(new Runnable() {
+
+        future = mScheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
+                if (mScheduledExecutorService.isShutdown()){
+                    return;
+                }
                 Log.e(TAG, "run:status " + mSpeechPlayer.getStatus());
 
                 if (mSpeechPlayer.getStatus() == SpeechConstants.TTS_STATUS_PLAYING) {
@@ -257,19 +265,27 @@ public class UniSoundSpeechSynthesizer implements ISpeechSynthesizer {
 //                    int back_silence = (int) mSpeechPlayer.getOption(SpeechConstants.TTS_KEY_BACK_SILENCE);//ms
 //                    Log.e(TAG, "run:back_silence " + back_silence);
 //                    float speedTTT = (1.0f * 570 / 128) * (1.0f * voice_speed / 100);
-                    // 1秒钟 4个字
-                    mReadedTextLength += (1.0f * 560 / 128) * period;
+                   /*@@@ // 1秒钟 4个字
+//                    mReadedTextLength += (1.0f * 560 / 128) * period;
+                    mReadedTextLength += (1.0f * 161 / 40) * period;
 //                    mReadedTextLength += (1.0f * 5324 / 884) * period;
-                    Log.e(TAG, "run: mReadedTextLength" + mReadedTextLength);
+                    float progress = mReadedTextLength / mTotalText.length() * 100;*/
+
+                    // 1秒钟 4.2个字
+                    float speed = 1.0f * 100 / 24;
+                    float speedInter = (1.0f - mSpeed / 50) * 1.36f;
+                    mReadedTextLength += (speed - speedInter) * period;
                     float progress = mReadedTextLength / mTotalText.length() * 100;
-                    progress= mSpeed / 50 * progress;
+                    Log.e(TAG, "run: mReadedTextLength=" + mReadedTextLength + ",totalText=" + mTotalText.length() + "，progress =" + progress);
+//                    progress= (float) mSpeed / 50  * progress;
                     progress = progress > 100 ? 100 : progress;
-                    Log.e(TAG, "run: progress" + progress);
                     if (mMySpeechSynthesizerListener != null) {
                         mMySpeechSynthesizerListener.onProgress(progress);
                     }
                 } else if (mSpeechPlayer.getStatus() == SpeechConstants.TTS_STATUS_END) {
+                    Thread.currentThread().interrupt();
                     if (mScheduledExecutorService != null) {
+                        future.cancel(true);
                         mScheduledExecutorService.shutdownNow();
                         mReadedTextLength = 0;
                     }
@@ -372,7 +388,8 @@ public class UniSoundSpeechSynthesizer implements ISpeechSynthesizer {
             log_d("code:" + code);
         }
         if (mScheduledExecutorService != null) {
-            mScheduledExecutorService.shutdownNow();
+            future.cancel(true);
+            mScheduledExecutorService.shutdown();
         }
     }
 
@@ -424,12 +441,11 @@ public class UniSoundSpeechSynthesizer implements ISpeechSynthesizer {
 
     @Override
     public void setSpeechSpeed(float speed) {
-        cancel();
+        SpeechSynthesizerFactory.getInstance().cancel();
         mSpeechPlayer = null;
-
-        mSpeed = (int) (speed * 50);
+        mSpeed = (int) (speed * 52);
         initOfflineModels();
-        speak(mTotalText);
+        SpeechSynthesizerFactory.getInstance().speak(mTotalText);
     }
 
 
