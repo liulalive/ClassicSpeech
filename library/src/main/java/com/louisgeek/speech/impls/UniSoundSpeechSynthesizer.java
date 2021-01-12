@@ -237,6 +237,10 @@ public class UniSoundSpeechSynthesizer implements ISpeechSynthesizer {
     Future future;
 
     private void initTask() {
+         if (mScheduledExecutorService!=null&&!mScheduledExecutorService.isShutdown()){
+            //这里判断的原因因为有时候会进来两次，影响后面线程池的任务initTask
+            return;
+        }
         mScheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
 
         future = mScheduledExecutorService.scheduleAtFixedRate(new Runnable() {
